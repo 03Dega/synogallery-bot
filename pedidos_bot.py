@@ -1,5 +1,8 @@
 import json
 import uuid
+import os
+import shutil
+
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -10,13 +13,22 @@ from telegram.ext import (
 )
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-TOKEN = "7749398970:AAEdLAkwzZKKZUREQrgPm5giQKq-xp4UJhk"
-ADMIN_CHAT_ID = 5194160874
+# ================= CONFIG =================
+
+TOKEN = os.getenv("7749398970:AAEdLAkwzZKKZUREQrgPm5giQKq-xp4UJhk")  # O pega tu token aquí si estás probando
+ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", 5194160874))
 ARCHIVO_PEDIDOS = "pedidos.json"
 
-TIPO, DETALLES, CONFIRMAR = range(3)
+(
+    TIPO,
+    CATEGORIA,
+    PERSONAJE,
+    SITUACION,
+    DETALLES,
+    CONFIRMAR,
+) = range(6)
 
-# ------------------ UTILIDADES ------------------
+# ================= UTILIDADES =================
 
 def cargar_pedidos():
     try:
@@ -26,10 +38,13 @@ def cargar_pedidos():
         return []
 
 def guardar_pedidos(pedidos):
+    if os.path.exists(ARCHIVO_PEDIDOS):
+        shutil.copy(ARCHIVO_PEDIDOS, ARCHIVO_PEDIDOS + ".bak")
+
     with open(ARCHIVO_PEDIDOS, "w", encoding="utf-8") as f:
         json.dump(pedidos, f, indent=4, ensure_ascii=False)
 
-# ------------------ FLUJO CLIENTE ------------------
+# ================= CLIENTE =================
 
 async def start(update, context):
     keyboard = [
@@ -38,10 +53,9 @@ async def start(update, context):
             InlineKeyboardButton("🎬 Animación", callback_data="Animación")
         ]
     ]
-
     await update.message.reply_text(
-        "Bienvenido.\n\n"
-        "Seleccione el tipo de pedido:",
+        "🎨 *Bienvenido*\n\n¿Qué deseas crear?",
+        parse_mode="Markdown",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return TIPO
@@ -52,20 +66,68 @@ async def tipo_pedido(update, context):
 
     context.user_data["tipo"] = query.data
 
+    keyboard = [
+        [
+            InlineKeyboardButton("👤 Personaje", callback_data="Personaje"),
+            InlineKeyboardButton("🌆 Ilustración", callback_data="Ilustración")
+        ]
+    ]
+
     await query.edit_message_text(
-        "Por favor, describa los detalles del pedido."
+        "🧩 ¿Qué tipo de contenido deseas?",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
+    return CATEGORIA
+
+async def categoria(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    context.user_data["categoria"] = query.data
+
+    if query.data == "Personaje":
+        await query.edit_message_text(
+            "👤 Escribe el nombre del personaje.\n"
+            "Ejemplo: Firefly (Honkai Star Rail)"
+        )
+        return PERSONAJE
+    else:
+        context.user_data["personaje"] = "No aplica"
+        await query.edit_message_text(
+            "🌆 Describe la escena o situación."
+        )
+        return SITUACION
+
+async def personaje(update, context):
+    context.user_data["personaje"] = update.message.text
+    await update.message.reply_text(
+        "🎭 Describe la escena o situación."
+    )
+    return SITUACION
+
+async def situacion(update, context):
+    context.user_data["situacion"] = update.message.text
+    await update.message.reply_text(
+        "✨ Detalles visuales:\n"
+        "- ropa\n"
+        "- expresión\n"
+        "- cámara\n"
+        "- ambiente"
     )
     return DETALLES
 
 async def detalles(update, context):
     context.user_data["detalles"] = update.message.text
 
-    resumen = (
-        "📄 *Resumen del pedido*\n\n"
-        f"{context.user_data['detalles']}\n\n"
-        "Su pedido estará listo en el menor tiempo posible.\n\n"
-        "¿Desea confirmar?"
-    )
+    resumen = f"""
+📄 *Resumen del pedido*
+
+🎨 Tipo: {context.user_data['tipo']}
+🧩 Categoría: {context.user_data['categoria']}
+👤 Personaje: {context.user_data['personaje']}
+🎭 Escena: {context.user_data['situacion']}
+✨ Detalles: {context.user_data['detalles']}
+"""
 
     keyboard = [
         [
@@ -85,92 +147,114 @@ async def confirmar(update, context):
     query = update.callback_query
     await query.answer()
 
-    if query.data == "confirmar":
-        pedidos = cargar_pedidos()
-
-        pedido_id = str(uuid.uuid4())[:8]
-
-        pedido = {
-            "id": pedido_id,
-            "tipo": context.user_data["tipo"],
-            "detalles": context.user_data["detalles"],
-            "cliente_chat_id": query.from_user.id,
-            "estado": "pendiente"
-        }
-
-        pedidos.append(pedido)
-        guardar_pedidos(pedidos)
-
-        await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            text=(
-                f"📥 *Nuevo pedido*\n"
-                f"ID: `{pedido_id}`\n\n"
-                f"{pedido['detalles']}"
-            ),
-            parse_mode="Markdown"
-        )
-
-        await query.edit_message_text(
-            "✅ Pedido registrado correctamente.\n"
-            "Su pedido estará listo en el menor tiempo posible."
-        )
-
-    else:
+    if query.data == "cancelar":
         await query.edit_message_text("❌ Pedido cancelado.")
+        context.user_data.clear()
+        return ConversationHandler.END
+
+    pedidos = cargar_pedidos()
+    pedido_id = str(uuid.uuid4())[:8]
+
+    pedido = {
+        "id": pedido_id,
+        "tipo": context.user_data["tipo"],
+        "categoria": context.user_data["categoria"],
+        "personaje": context.user_data["personaje"],
+        "situacion": context.user_data["situacion"],
+        "detalles": context.user_data["detalles"],
+        "cliente": {
+            "id": query.from_user.id,
+            "username": query.from_user.username,
+            "nombre": query.from_user.full_name
+        },
+        "estado": "pendiente"
+    }
+
+    pedidos.append(pedido)
+    guardar_pedidos(pedidos)
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📦 Entregar pedido", callback_data=f"entregar_{pedido_id}")]
+    ])
+
+    await context.bot.send_message(
+        chat_id=ADMIN_CHAT_ID,
+        text=(
+            f"📥 *Nuevo pedido*\n\n"
+            f"🆔 `{pedido_id}`\n"
+            f"👤 {pedido['cliente']['nombre']}\n"
+            f"🎨 {pedido['tipo']} / {pedido['categoria']}\n"
+            f"🎭 {pedido['situacion']}\n\n"
+            f"{pedido['detalles']}"
+        ),
+        parse_mode="Markdown",
+        reply_markup=keyboard
+    )
+
+    await query.edit_message_text(
+        "✅ Pedido registrado.\nTe avisaré cuando esté listo ✨"
+    )
 
     context.user_data.clear()
     return ConversationHandler.END
 
-# ------------------ ADMIN ------------------
+# ================= ENTREGA ADMIN =================
 
-async def pedidos(update, context):
+async def activar_entrega(update, context):
+    query = update.callback_query
+    await query.answer()
+
+    pedido_id = query.data.replace("entregar_", "")
+    context.bot_data["pedido_entrega"] = pedido_id
+
+    await query.edit_message_text(
+        "📦 Modo entrega activado.\n"
+        "Envía ahora la imagen, video o animación."
+    )
+
+async def recibir_entrega(update, context):
     if update.message.chat_id != ADMIN_CHAT_ID:
         return
 
-    pedidos = cargar_pedidos()
-    pendientes = [p for p in pedidos if p["estado"] == "pendiente"]
-
-    if not pendientes:
-        await update.message.reply_text("No hay pedidos pendientes.")
+    pedido_id = context.bot_data.get("pedido_entrega")
+    if not pedido_id:
         return
 
-    texto = "📋 *Pedidos pendientes:*\n\n"
-    for p in pendientes:
-        texto += f"• ID: `{p['id']}`\n"
-
-    await update.message.reply_text(texto, parse_mode="Markdown")
-
-async def completar(update, context):
-    if update.message.chat_id != ADMIN_CHAT_ID:
-        return
-
-    if len(context.args) != 1:
-        await update.message.reply_text("Uso: /completar ID")
-        return
-
-    pedido_id = context.args[0]
     pedidos = cargar_pedidos()
 
     for p in pedidos:
-        if p["id"] == pedido_id and p["estado"] == "pendiente":
+        if p["id"] == pedido_id:
+            cliente_id = p["cliente"]["id"]
+
+            if update.message.photo:
+                await context.bot.send_photo(
+                    chat_id=cliente_id,
+                    photo=update.message.photo[-1].file_id,
+                    caption="🖼 Pedido entregado. ¡Disfrútalo!"
+                )
+
+            elif update.message.animation:
+                await context.bot.send_animation(
+                    chat_id=cliente_id,
+                    animation=update.message.animation.file_id,
+                    caption="🎬 Pedido entregado. ¡Disfrútalo!"
+                )
+
+            elif update.message.video:
+                await context.bot.send_video(
+                    chat_id=cliente_id,
+                    video=update.message.video.file_id,
+                    caption="🎬 Pedido entregado. ¡Disfrútalo!"
+                )
+
             p["estado"] = "completado"
             guardar_pedidos(pedidos)
+            context.bot_data.pop("pedido_entrega")
 
-            await context.bot.send_message(
-                chat_id=p["cliente_chat_id"],
-                text=(
-                    "✅ Su pedido ha sido completado.\n\n"
-                    "Gracias por su confianza."
-                )
-            )
-
-            await update.message.reply_text("Pedido marcado como completado.")
+            await update.message.reply_text("✅ Entrega enviada al cliente.")
             return
 
-    await update.message.reply_text("Pedido no encontrado.")
-
-# ------------------ APP ------------------
+# ================= APP =================
 
 app = ApplicationBuilder().token(TOKEN).build()
 
@@ -178,15 +262,21 @@ conv = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
         TIPO: [CallbackQueryHandler(tipo_pedido)],
-        DETALLES: [MessageHandler(filters.TEXT & ~filters.COMMAND, detalles)],
+        CATEGORIA: [CallbackQueryHandler(categoria)],
+        PERSONAJE: [MessageHandler(filters.TEXT & ~filters.COMMAND, personaje)],
+        SITUACION: [MessageHandler(filters.TEXT & ~filters.COMMAND, situacion)],
+        DETALLES: [MessageHandler(filters.TEXT & ~filters.COMMAND, descripcion)],
         CONFIRMAR: [CallbackQueryHandler(confirmar)],
     },
-    fallbacks=[],
+    fallbacks=[CommandHandler("cancelar", start)]
 )
 
 app.add_handler(conv)
-app.add_handler(CommandHandler("pedidos", pedidos))
-app.add_handler(CommandHandler("completar", completar))
+app.add_handler(CallbackQueryHandler(activar_entrega, pattern="^entregar_"))
+app.add_handler(MessageHandler(
+    filters.PHOTO | filters.VIDEO | filters.ANIMATION,
+    recibir_entrega
+))
 
 print("🤖 Bot profesional activo.")
 app.run_polling()
