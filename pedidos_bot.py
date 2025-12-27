@@ -266,7 +266,7 @@ conv = ConversationHandler(
         CATEGORIA: [CallbackQueryHandler(categoria)],
         PERSONAJE: [MessageHandler(filters.TEXT & ~filters.COMMAND, personaje)],
         SITUACION: [MessageHandler(filters.TEXT & ~filters.COMMAND, situacion)],
-        DETALLES: [MessageHandler(filters.TEXT & ~filters.COMMAND, descripcion)],
+        DETALLES: [MessageHandler(filters.TEXT & ~filters.COMMAND, detalles)],
         CONFIRMAR: [CallbackQueryHandler(confirmar)],
     },
     fallbacks=[CommandHandler("cancelar", start)]
