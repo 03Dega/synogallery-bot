@@ -15,8 +15,9 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # ================= CONFIG =================
 
-TOKEN = "7716351305:AAE2jegN6vrND8y122xhNPiFPA9oM4K5XhM" 
-ADMIN_CHAT_ID = "5194160874"
+TOKEN = "7716351305:AAE2jegN6vrND8y122xhNPiFPA9oM4K5XhM"
+ADMIN_CHAT_ID = 5194160874
+
 ARCHIVO_PEDIDOS = "pedidos.json"
 
 (
