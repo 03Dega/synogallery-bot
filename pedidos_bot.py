@@ -15,8 +15,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 # ================= CONFIG =================
 
-TOKEN = os.getenv("7716351305:AAE2jegN6vrND8y122xhNPiFPA9oM4K5XhM")  # O pega tu token aquí si estás probando
-ADMIN_CHAT_ID = int(os.getenv("ADMIN_CHAT_ID", 5194160874))
+TOKEN = "7716351305:AAE2jegN6vrND8y122xhNPiFPA9oM4K5XhM" 
+ADMIN_CHAT_ID = "5194160874"
 ARCHIVO_PEDIDOS = "pedidos.json"
 
 (
